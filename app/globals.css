@@ -1,0 +1,31 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f172a;
+  --surface: #1e293b;
+  --text-primary: #f1f5f9;
+  
+  --font-orbitron: 'Orbitron', sans-serif;
+  --font-rajdhani: 'Rajdhani', sans-serif;
+}
+
+.high-contrast {
+  --background: #000000;
+  --surface: #ffffff;
+  --text-primary: #ffffff;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-rajdhani);
+}
+
+/* Accessibility Focus Ring */
+*:focus-visible {
+  outline: 4px solid #facc15;
+  outline-offset: 2px;
+}
