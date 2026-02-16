@@ -4,16 +4,22 @@ import GameScene from './components/GameScene';
 import HUD from './components/HUD';
 import MainMenu from './components/MainMenu';
 import { GameState, Player, Commentary, Rival } from './types';
-import { INITIAL_RIVALS_COUNT } from './constants';
-import { generateRivalProfile } from './services/geminiService';
+import { AudioManager } from './game/AudioManager';
+import { doc, setDoc, increment } from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { useAuth } from './context/AuthContext';
 
 const App: React.FC = () => {
+  const { user } = useAuth();
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
+  
+  // HUD State (React State - updates slower)
   const [playerStats, setPlayerStats] = useState<Player>({ 
     x: 0, z: 0, speed: 0, maxSpeed: 240, 
-    health: 100, score: 0, gear: 0, rpm: 0, 
-    isAttacking: false, attackType: 'NONE'
+    health: 100, fuel: 100, score: 0, gear: 0, rpm: 0, 
+    isAttacking: false, attackType: 'NONE', lean: 0
   });
+
   const [commentary, setCommentary] = useState<Commentary | null>(null);
   const [rivals, setRivals] = useState<Rival[]>([]);
   const [endGameSummary, setEndGameSummary] = useState<string>('');
@@ -25,43 +31,61 @@ const App: React.FC = () => {
     }
   }, [commentary]);
 
-  const startGame = async () => {
+  // Save Score Logic
+  useEffect(() => {
+      if ((gameState === GameState.GAME_OVER || gameState === GameState.VICTORY) && user && db) {
+          const saveScore = async () => {
+              try {
+                  const scoreRef = doc(db, "scores", user.uid);
+                  await setDoc(scoreRef, {
+                      username: user.displayName,
+                      score: Math.floor(playerStats.score),
+                      lastPlayed: new Date(),
+                      totalRaces: increment(1)
+                  }, { merge: true });
+              } catch (e) {
+                  console.error("Score save failed", e);
+              }
+          }
+          saveScore();
+      }
+  }, [gameState, user]);
+
+  const startGame = () => {
     setEndGameSummary('');
-    
-    // Init Rivals with Police
-    const initialRivals: Rival[] = [];
-    
-    // Add Police
-    for(let i=0; i<2; i++) {
-        initialRivals.push({
-            id: `police_${i}`,
+    AudioManager.getInstance().start();
+
+    // Initialize Rivals
+    const initialRivals: Rival[] = [
+        {
+            id: 'police_1',
             name: 'Police',
-            x: (i === 0 ? -5 : 5),
-            z: 50, // Behind
-            speed: 0,
+            x: -5,
+            z: 80, // Starts behind
+            speed: 80, 
             dx: 0,
             type: 'POLICE',
             state: 'CHASING',
             health: 200,
             personality: 'Relentless',
-            color: 0xffffff
-        });
-    }
-
-    // Add Racer
-    initialRivals.push({
-        id: 'racer_1',
-        name: 'Viper',
-        x: 0,
-        z: -50, // Ahead
-        speed: 40,
-        dx: 0,
-        type: 'RIVAL',
-        state: 'CHASING',
-        health: 100,
-        personality: 'Aggressive',
-        color: 0xffff00
-    });
+            color: 0xffffff,
+            lean: 0
+        },
+        {
+            id: 'rival_1',
+            name: 'Viper',
+            x: 3,
+            z: -40, // Starts ahead
+            speed: 60,
+            dx: 0,
+            type: 'RIVAL',
+            state: 'CHASING',
+            health: 100,
+            personality: 'Aggressive',
+            color: 0xffff00,
+            lean: 0
+        }
+    ];
 
     setRivals(initialRivals);
     setGameState(GameState.RACING);
@@ -69,6 +93,7 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#050505]">
+      {/* 3D Scene handles Physics & Rendering */}
       <GameScene 
         gameState={gameState} 
         setGameState={setGameState} 
@@ -79,12 +104,14 @@ const App: React.FC = () => {
         setEndGameSummary={setEndGameSummary}
       />
       
+      {/* 2D HUD Layer */}
       <HUD 
         player={playerStats} 
         commentary={commentary} 
         gameState={gameState}
       />
       
+      {/* Menus */}
       <MainMenu 
         gameState={gameState} 
         startGame={startGame}

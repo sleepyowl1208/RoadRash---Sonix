@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import React from "react";
 import { Orbitron, Rajdhani } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
@@ -17,8 +17,8 @@ const rajdhani = Rajdhani({
   display: 'swap'
 });
 
-export const metadata: Metadata = {
-  title: "Road Rash: Neon Vengeance",
+export const metadata = {
+  title: "Road Rash - Sonix",
   description: "2026 Reimagining of a Classic",
 };
 

@@ -17,9 +17,9 @@ const MainMenu: React.FC<MainMenuProps> = ({ gameState, startGame, summary }) =>
         {gameState === GameState.MENU && (
             <>
                 <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 mb-2 neon-text italic transform -skew-x-12">
-                NEON<br/>VENGEANCE
+                ROAD RASH<br/>SONIX
                 </h1>
-                <p className="text-xl text-cyan-200 mb-8 font-mono tracking-widest">ROAD RASH 2026</p>
+                <p className="text-xl text-cyan-200 mb-8 font-mono tracking-widest">2026 EDITION</p>
                 
                 <div className="space-y-4 mb-8 text-left bg-black/50 p-6 rounded border-l-4 border-pink-500">
                     <p className="text-gray-300"><strong className="text-white">MISSION:</strong> Survive the infinite highway.</p>

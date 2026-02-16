@@ -1,43 +1,231 @@
-
 "use client";
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo, useState, Suspense } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { 
+  Environment, 
+  PerspectiveCamera, 
+  Stars,
+  Loader,
+  Cloud,
+} from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, Noise, ToneMapping, ChromaticAberration } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { Player, Rival, GameState, Commentary, Weather } from '../types';
-import { CAMERA_HEIGHT, CAMERA_DEPTH, PHYSICS, ROAD_WIDTH } from '../constants';
+import { PHYSICS, ROAD_WIDTH, CAMERA_HEIGHT, CAMERA_DEPTH } from '../constants';
 import { PhysicsEngine } from '../game/PhysicsEngine';
 import { PoliceAI } from '../game/PoliceAI';
 import { AudioManager } from '../game/AudioManager';
-import { EnvironmentManager } from '../game/EnvironmentManager';
 
-// Procedural Mesh Factories (Lightweight)
-const createBikeMesh = (color: number, isPolice: boolean) => {
-    const group = new THREE.Group();
-    // Simplified Low-Poly Bike for performance
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.7 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 1.8), bodyMat);
-    body.position.y = 0.5;
-    body.castShadow = true;
-    group.add(body);
-    
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const w1 = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.2), wheelMat);
-    w1.rotation.z = Math.PI/2; w1.position.set(0,0.35,0.7); group.add(w1);
-    const w2 = w1.clone(); w2.position.set(0,0.35,-0.7); group.add(w2);
-    
-    const rider = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.8), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-    rider.position.set(0, 1.0, -0.2);
-    rider.rotation.x = -0.5;
-    group.add(rider);
+// --- MATERIALS & SHADERS ---
 
-    if(isPolice) {
-        const sirenL = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.1,0.1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-        sirenL.position.set(-0.2, 0.9, -0.6); sirenL.name = "sirenR"; group.add(sirenL);
-        const sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.1,0.1), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
-        sirenR.position.set(0.2, 0.9, -0.6); sirenR.name = "sirenB"; group.add(sirenR);
+const RoadMaterial = ({ weather, playerZ, speed }: { weather: Weather, playerZ: number, speed: number }) => {
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
+  
+  const uniforms = useMemo(() => ({
+     uTime: { value: 0 },
+     uWeather: { value: 0 }, 
+     uColor: { value: new THREE.Color("#080808") }, 
+     uLineColor: { value: new THREE.Color("#444444") },
+     uOffset: { value: 0.0 },
+     uSpeed: { value: 0.0 }
+  }), []);
+
+  useFrame((state) => {
+    if (shaderRef.current) {
+        shaderRef.current.uniforms.uTime.value = state.clock.elapsedTime;
+        shaderRef.current.uniforms.uWeather.value = weather === Weather.RAIN ? 1 : weather === Weather.SNOW ? 2 : 0;
+        // Player moves negative Z, so we subtract to scroll texture forward
+        shaderRef.current.uniforms.uOffset.value = -playerZ * 0.05; 
+        shaderRef.current.uniforms.uSpeed.value = speed;
     }
-    return group;
+  });
+
+  return (
+    <shaderMaterial
+      ref={shaderRef}
+      uniforms={uniforms}
+      vertexShader={`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `}
+      fragmentShader={`
+        uniform float uTime;
+        uniform float uWeather; 
+        uniform vec3 uColor;
+        uniform vec3 uLineColor;
+        uniform float uOffset;
+        varying vec2 vUv;
+        
+        float hash(vec2 p) { return fract(1e4 * sin(17.0 * p.x + p.y * 0.1) * (0.1 + abs(sin(p.y * 13.0 + p.x)))); }
+
+        void main() {
+          vec2 uv = vUv;
+          uv.y += uOffset; // Scroll
+
+          vec3 color = uColor;
+          
+          // Noise / Grain
+          float noise = hash(uv * 100.0); 
+          color += vec3(noise * 0.05);
+
+          // Center Lines (Dashed)
+          float dash = sin(uv.y * 40.0);
+          if (abs(uv.x - 0.5) < 0.01 && dash > 0.0) {
+             color = uLineColor * 2.0; 
+          }
+          
+          // Edge Lines (Neon)
+          if (abs(uv.x - 0.5) > 0.45 && abs(uv.x - 0.5) < 0.47) {
+             color = vec3(0.0, 0.8, 1.0) * 1.5; 
+          }
+
+          // Rain Reflection
+          if (uWeather == 1.0) {
+             color *= 0.5; 
+             float puddle = hash(uv * 5.0);
+             if (puddle > 0.6) color += 0.2; 
+          }
+          
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `}
+    />
+  );
 };
+
+// --- SCENERY ---
+
+const CyberBuilding = ({ seed }: { seed: number }) => {
+    const rand = (offset: number) => Math.abs(Math.sin(seed + offset));
+    const height = 20 + rand(1) * 80;
+    const width = 10 + rand(2) * 10;
+    const depth = 10 + rand(3) * 10;
+    const neonColor = rand(4) > 0.5 ? "magenta" : "cyan";
+
+    return (
+        <group position={[0, height / 2, 0]}>
+            <mesh castShadow receiveShadow>
+                <boxGeometry args={[width, height, depth]} />
+                <meshStandardMaterial color="#050505" roughness={0.2} metalness={0.8} />
+            </mesh>
+            <mesh position={[width/2 + 0.1, 0, 0]}>
+                <boxGeometry args={[0.2, height * 0.9, 0.5]} />
+                <meshBasicMaterial color={neonColor} toneMapped={false} />
+            </mesh>
+             <mesh position={[0, 0, depth/2 + 0.1]}>
+                <planeGeometry args={[width * 0.6, height * 0.8]} />
+                <meshBasicMaterial color="#000" />
+            </mesh>
+        </group>
+    );
+};
+
+const SceneryManager = ({ playerZ }: { playerZ: number }) => {
+    // Static array of building data
+    const buildings = useMemo(() => {
+        const arr = [];
+        const gap = 100; 
+        const count = 40; 
+        for (let i = -5; i < count; i++) {
+            arr.push({ x: -50 - Math.random() * 20, zOffset: i * gap, seed: i * 135 });
+            arr.push({ x: 50 + Math.random() * 20, zOffset: i * gap, seed: i * 921 });
+        }
+        return arr;
+    }, []);
+
+    // Loop logic period
+    const PERIOD = 3000; 
+
+    return (
+        <group>
+            {buildings.map((b, i) => {
+                // Calculate position relative to player loop
+                // We want the buildings to tile infinitely as player moves -Z
+                
+                // Get the base world Z of this building relative to 0
+                const baseZ = b.zOffset;
+                
+                // Determine how many periods we have moved
+                const currentPeriod = Math.floor(Math.abs(playerZ) / PERIOD);
+                
+                // Calculate z position. 
+                // We shift the whole block of buildings to stay around the player
+                let renderZ = baseZ - (Math.floor((playerZ - baseZ) / PERIOD) * PERIOD);
+                
+                // Fine tune to keep them appearing in front and disappearing behind
+                // If player is at -1000. Building at -100.
+                // We want buildings to be in range [playerZ - 800, playerZ + 200]
+                
+                // Simple tiling:
+                // Relative Z from player
+                let relZ = (b.zOffset - playerZ) % PERIOD;
+                if (relZ < 0) relZ += PERIOD;
+                if (relZ > PERIOD/2) relZ -= PERIOD;
+                
+                const finalZ = playerZ + relZ;
+
+                // Optimization: Don't render if too far
+                if (Math.abs(finalZ - playerZ) > 600) return null;
+
+                return (
+                    <group key={i} position={[b.x, 0, finalZ]}>
+                         <CyberBuilding seed={b.seed} />
+                    </group>
+                );
+            })}
+        </group>
+    );
+};
+
+// --- BIKES ---
+
+const BikeModel = ({ color, isPolice, lean }: { color: any, isPolice: boolean, lean: number }) => {
+    const chassis = useRef<THREE.Group>(null);
+    useFrame((state, delta) => {
+        if(chassis.current) {
+            // Visual lean smoothing
+            chassis.current.rotation.z = THREE.MathUtils.damp(chassis.current.rotation.z, lean, 15, delta);
+        }
+    });
+
+    return (
+        <group ref={chassis}>
+            {/* Body */}
+            <mesh position={[0, 0.6, 0]} castShadow>
+                <boxGeometry args={[0.5, 0.6, 1.5]} />
+                <meshStandardMaterial color={isPolice ? "white" : color} roughness={0.2} metalness={0.8} />
+            </mesh>
+            {/* Wheels */}
+            <mesh position={[0, 0.35, 0.8]} rotation={[0,0,Math.PI/2]} castShadow>
+                <cylinderGeometry args={[0.35, 0.35, 0.2]} />
+                <meshStandardMaterial color="#111" />
+            </mesh>
+            <mesh position={[0, 0.35, -0.8]} rotation={[0,0,Math.PI/2]} castShadow>
+                <cylinderGeometry args={[0.35, 0.35, 0.2]} />
+                <meshStandardMaterial color="#111" />
+            </mesh>
+            {/* Rider */}
+            <mesh position={[0, 1.0, -0.2]} rotation={[0.4, 0, 0]}>
+                <capsuleGeometry args={[0.25, 0.6]} />
+                <meshStandardMaterial color="#222" />
+            </mesh>
+            <mesh position={[0, 1.45, 0]}>
+                 <sphereGeometry args={[0.18]} />
+                 <meshStandardMaterial color={isPolice ? "white" : color} />
+            </mesh>
+            {isPolice && (
+                <pointLight position={[0, 1.5, -0.5]} color="blue" distance={10} intensity={5} decay={2} />
+            )}
+             <pointLight position={[0, 0.5, -1.0]} color="red" distance={2} intensity={2} />
+        </group>
+    )
+}
+
+// --- GAME LOGIC ---
 
 interface GameSceneProps {
   gameState: GameState;
@@ -49,278 +237,190 @@ interface GameSceneProps {
   setEndGameSummary: (s: string) => void;
 }
 
-const GameScene: React.FC<GameSceneProps> = ({ 
-    gameState, setGameState, setPlayerStats, rivals, setCommentary 
-}) => {
-  const mountRef = useRef<HTMLDivElement>(null);
-  
-  // Logic Refs
-  const physicsRef = useRef<PhysicsEngine>(new PhysicsEngine());
-  const aiRef = useRef<PoliceAI>(new PoliceAI());
-  const audioRef = useRef<AudioManager | null>(null);
-  const isMounted = useRef(true);
-  
-  // Game State Refs (Mutable for loop)
-  const playerRef = useRef<Player>({ 
-      x: 0, z: 0, speed: 0, maxSpeed: PHYSICS.MAX_SPEED, 
-      health: 100, score: 0, gear: 0, rpm: 1500, isAttacking: false, attackType: 'NONE' 
-  });
-  const inputRef = useRef({ up: false, down: false, left: false, right: false });
-  const weatherRef = useRef<Weather>(Weather.SUNNY);
-  
-  // Three JS Refs
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const playerMeshRef = useRef<THREE.Group | null>(null);
-  const rivalsMeshMap = useRef<Map<string, THREE.Group>>(new Map());
-  const envRef = useRef<EnvironmentManager | null>(null);
-
-  // Input Handling
-  useEffect(() => {
-    const onKD = (e: KeyboardEvent) => {
-        if(e.key === 'ArrowUp' || e.key === 'w') inputRef.current.up = true;
-        if(e.key === 'ArrowDown' || e.key === 's') inputRef.current.down = true;
-        if(e.key === 'ArrowLeft' || e.key === 'a') inputRef.current.left = true;
-        if(e.key === 'ArrowRight' || e.key === 'd') inputRef.current.right = true;
-    };
-    const onKU = (e: KeyboardEvent) => {
-        if(e.key === 'ArrowUp' || e.key === 'w') inputRef.current.up = false;
-        if(e.key === 'ArrowDown' || e.key === 's') inputRef.current.down = false;
-        if(e.key === 'ArrowLeft' || e.key === 'a') inputRef.current.left = false;
-        if(e.key === 'ArrowRight' || e.key === 'd') inputRef.current.right = false;
-    };
-    window.addEventListener('keydown', onKD);
-    window.addEventListener('keyup', onKU);
-    return () => {
-        window.removeEventListener('keydown', onKD);
-        window.removeEventListener('keyup', onKU);
-    }
-  }, []);
-
-  // Init Engine
-  useEffect(() => {
-    if (!mountRef.current) return;
-    isMounted.current = true;
-
-    // 1. Setup Scene
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    const camera = new THREE.PerspectiveCamera(65, width / height, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(width, height);
-    renderer.shadowMap.enabled = true;
-    mountRef.current.appendChild(renderer.domElement);
-
-    // 2. Managers
-    const env = new EnvironmentManager(scene);
-    envRef.current = env;
+const GameController = ({ 
+    gameState, setGameState, setPlayerStats, rivals, setRivals, setEndGameSummary 
+}: GameSceneProps) => {
+    const { camera } = useThree();
     
-    // Audio - Initialize safely
-    try {
-        if (!audioRef.current) {
-            audioRef.current = new AudioManager();
-        }
-    } catch(e) {
-        console.error("Audio init failed", e);
-    }
-
-    // 3. Player
-    const pMesh = createBikeMesh(0xe74c3c, false);
-    scene.add(pMesh);
-    playerMeshRef.current = pMesh;
-
-    // 4. Rivals (Pool)
-    // Clear existing meshes if re-running
-    rivalsMeshMap.current.forEach(mesh => scene.remove(mesh));
-    rivalsMeshMap.current.clear();
-
-    rivals.forEach(r => {
-        const rMesh = createBikeMesh(r.color, r.name === 'Police');
-        // Spawn BEHIND
-        r.z = 50; 
-        rMesh.position.set(r.x, 0, r.z);
-        scene.add(rMesh);
-        rivalsMeshMap.current.set(r.id, rMesh);
+    // Mutable Physics State (Ref based for performance)
+    const playerRef = useRef<Player>({ 
+        x: 0, z: 0, speed: 0, maxSpeed: PHYSICS.MAX_SPEED, 
+        health: 100, fuel: 100, score: 0, gear: 0, rpm: 1200, 
+        isAttacking: false, attackType: 'NONE', lean: 0
     });
 
-    // 5. Traffic (Instanced)
-    const trafficCount = 20;
-    const trafficGeo = new THREE.BoxGeometry(1.5, 1.2, 3.5);
-    const trafficMat = new THREE.MeshStandardMaterial({ color: 0xcccccc });
-    const trafficMesh = new THREE.InstancedMesh(trafficGeo, trafficMat, trafficCount);
-    const trafficData = new Float32Array(trafficCount * 4); // x, z, speed, active
-    for(let i=0; i<trafficCount; i++) {
-        const dummy = new THREE.Object3D();
-        dummy.position.set((Math.random()-0.5)*ROAD_WIDTH, 0.6, -Math.random()*1000);
-        dummy.updateMatrix();
-        trafficMesh.setMatrixAt(i, dummy.matrix);
-        trafficData[i*4] = dummy.position.x;
-        trafficData[i*4+1] = dummy.position.z;
-        trafficData[i*4+2] = 20 + Math.random() * 20; // Slower speed
-    }
-    scene.add(trafficMesh);
+    const rivalsRef = useRef(rivals);
+    const inputs = useRef({ up: false, down: false, left: false, right: false });
+    const physics = useRef(new PhysicsEngine());
+    const ai = useRef(new PoliceAI());
+    const audio = AudioManager.getInstance();
+    const frameCount = useRef(0);
 
-    // --- GAME LOOP ---
-    const clock = new THREE.Clock();
-    let animId = 0;
+    // Sync Rivals State from props
+    useEffect(() => { rivalsRef.current = rivals; }, [rivals]);
 
-    const animate = () => {
-        if (!isMounted.current) return;
+    // Input Listeners
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent, isDown: boolean) => {
+            if(e.code === 'ArrowUp' || e.code === 'KeyW') inputs.current.up = isDown;
+            if(e.code === 'ArrowDown' || e.code === 'KeyS') inputs.current.down = isDown;
+            if(e.code === 'ArrowLeft' || e.code === 'KeyA') inputs.current.left = isDown;
+            if(e.code === 'ArrowRight' || e.code === 'KeyD') inputs.current.right = isDown;
+        };
+        const down = (e: KeyboardEvent) => handleKey(e, true);
+        const up = (e: KeyboardEvent) => handleKey(e, false);
+        window.addEventListener('keydown', down);
+        window.addEventListener('keyup', up);
+        return () => {
+            window.removeEventListener('keydown', down);
+            window.removeEventListener('keyup', up);
+            audio.stop();
+        }
+    }, []);
 
-        const dt = Math.min(clock.getDelta(), 0.1);
-        const time = clock.getElapsedTime();
-
+    // Reset on Start
+    useEffect(() => {
         if (gameState === GameState.RACING) {
-            // A. Physics
-            const p = playerRef.current;
-            const physRes = physicsRef.current.updatePlayer(p, inputRef.current, dt, weatherRef.current);
-            (p as any).lean = physRes.lean; // Store lean state
+            playerRef.current = { 
+                x: 0, z: 0, speed: 0, maxSpeed: PHYSICS.MAX_SPEED, 
+                health: 100, fuel: 100, score: 0, gear: 0, rpm: 1200, 
+                isAttacking: false, attackType: 'NONE', lean: 0
+            };
+            // Reset camera
+            camera.position.set(0, CAMERA_HEIGHT, CAMERA_DEPTH);
+        }
+    }, [gameState]);
 
-            // B. Environment
-            env.update(p.z, weatherRef.current === Weather.RAIN);
+    // MAIN GAME LOOP
+    useFrame((state, delta) => {
+        if (gameState !== GameState.RACING) return;
+        
+        const dt = Math.min(delta, 0.1);
+        const p = playerRef.current;
+        
+        // 1. Update Player Physics
+        // PhysicsEngine updates p.x, p.z, p.speed in place
+        physics.current.updatePlayer(p, inputs.current, dt, Weather.SUNNY);
+        
+        p.score = Math.abs(p.z);
+        
+        // 2. Rivals
+        rivalsRef.current.forEach(r => {
+             if (r.name === 'Police') {
+                 ai.current.update(r, p.z, p.x, p.speed, dt);
+             } else {
+                 // Basic racer logic
+                 r.z -= r.speed * dt;
+                 // Keep them engaged
+                 if (r.z > p.z + 100) r.z = p.z - 200;
+             }
+             
+             // Simple collision
+             if (Math.abs(r.z - p.z) < 2 && Math.abs(r.x - p.x) < 1) {
+                 physics.current.resolveCollision(p, r);
+                 p.health -= 1;
+             }
+        });
 
-            // C. Player Visuals
-            if (playerMeshRef.current) {
-                playerMeshRef.current.position.set(p.x, 0, p.z);
-                playerMeshRef.current.rotation.z = physRes.lean + physRes.wobble;
-                playerMeshRef.current.position.y = Math.sin(time*30)*0.01; // Engine vibe
-            }
+        // 3. Audio
+        audio.updateEngine(p.rpm, p.speed);
 
-            // D. Camera
-            // Smooth follow
-            const targetZ = p.z + CAMERA_DEPTH + (p.speed * 0.05); // Pull back speed
-            camera.position.z += (targetZ - camera.position.z) * 5.0 * dt;
-            camera.position.x += (p.x * 0.8 - camera.position.x) * 3.0 * dt;
-            camera.position.y = CAMERA_HEIGHT + Math.sin(time * 10) * 0.02; // Vertical bob
-            
-            // Shake
-            const shakeAmt = (p.speed / PHYSICS.MAX_SPEED) * 0.02;
-            camera.position.x += (Math.random()-0.5)*shakeAmt;
-            camera.position.y += (Math.random()-0.5)*shakeAmt;
-            
-            camera.lookAt(p.x * 0.3, 1.0, p.z - 20);
+        // 4. Camera Follow
+        // CRITICAL: Camera Z must be relative to Player Z
+        const targetZ = p.z + CAMERA_DEPTH + (p.speed * 0.1); // Pull back slightly with speed
+        const targetX = p.x * 0.8;
+        const targetY = CAMERA_HEIGHT + (p.speed / 100) * 0.5;
 
-            // E. Rivals / Police AI
-            let nearestSirenDist = 999;
-            rivals.forEach(r => {
-                const mesh = rivalsMeshMap.current.get(r.id);
-                if (mesh) {
-                    if (r.name === 'Police') {
-                        // Police AI logic
-                        aiRef.current.update(r, p.z, p.x, p.speed, dt);
-                        
-                        // Siren Lights
-                        if (Math.floor(time * 8) % 2 === 0) {
-                             const sR = mesh.getObjectByName('sirenR') as THREE.Mesh;
-                             if(sR) (sR.material as THREE.MeshBasicMaterial).color.setHex(0xff0000);
-                        } else {
-                             const sR = mesh.getObjectByName('sirenR') as THREE.Mesh;
-                             if(sR) (sR.material as THREE.MeshBasicMaterial).color.setHex(0x330000);
-                        }
+        // Soft follow
+        camera.position.z += (targetZ - camera.position.z) * 10 * dt;
+        camera.position.x += (targetX - camera.position.x) * 5 * dt;
+        camera.position.y += (targetY - camera.position.y) * 5 * dt;
+        
+        // Look ahead
+        camera.lookAt(p.x * 0.5, 1.0, p.z - 50);
 
-                        // Audio Distance check
-                        const d = Math.abs(r.z - p.z);
-                        if (d < nearestSirenDist) nearestSirenDist = d;
-                    } else {
-                        // Simple Racer Logic
-                        r.z -= (r.speed || 50) * dt; 
-                        // Keep them relevant if they fall too far behind
-                        if (r.z > p.z + 100) r.z = p.z - 200;
-                    }
-                    
-                    // Collision
-                    if (Math.abs(r.z - p.z) < 2 && Math.abs(r.x - p.x) < 1) {
-                        physicsRef.current.resolveCollision(p, r);
-                        if(audioRef.current) audioRef.current.playCrash();
-                        p.health -= 2;
-                        // Shake camera hard
-                        camera.position.y -= 0.2;
-                    }
-
-                    mesh.position.set(r.x, 0, r.z);
-                    mesh.rotation.z = -(r.dx || 0) * 0.5; // Lean into turn
-                }
-            });
-
-            // F. Traffic Update
-            const dummy = new THREE.Object3D();
-            for(let i=0; i<trafficCount; i++) {
-                let tz = trafficData[i*4+1];
-                const tx = trafficData[i*4];
-                const tSpeed = trafficData[i*4+2];
-                
-                // Move traffic
-                tz -= tSpeed * dt;
-                
-                // Loop around player
-                if (tz > p.z + 50) tz = p.z - 600 - Math.random()*200;
-                
-                trafficData[i*4+1] = tz;
-                
-                dummy.position.set(tx, 0.6, tz);
-                dummy.updateMatrix();
-                trafficMesh.setMatrixAt(i, dummy.matrix);
-                
-                // Traffic Collision
-                if (Math.abs(tz - p.z) < 3 && Math.abs(tx - p.x) < 1.5) {
-                    p.health -= 10;
-                    p.speed *= 0.5;
-                    audioRef.current?.playCrash();
-                    setCommentary({ text: "TRAFFIC COLLISION", speaker: "System", timestamp: Date.now() });
-                }
-            }
-            trafficMesh.instanceMatrix.needsUpdate = true;
-
-            // G. Audio Update
-            if (audioRef.current) {
-                audioRef.current.updateEngine(p.rpm, p.speed);
-                audioRef.current.updateSiren(nearestSirenDist);
-            }
-
-            // Sync Stats
-            if (Math.floor(time * 10) % 5 === 0) {
-                setPlayerStats({ ...p });
-            }
-
-            if (p.health <= 0) {
-                setGameState(GameState.GAME_OVER);
-                audioRef.current?.stop();
-            }
+        // 5. Game Over
+        if (p.fuel <= 0) p.speed *= 0.98; // Stall
+        if (p.health <= 0) {
+            setGameState(GameState.GAME_OVER);
+            setEndGameSummary("CRASHED");
+            audio.stop();
         }
 
-        renderer.render(scene, camera);
-        animId = requestAnimationFrame(animate);
-    };
-    animate();
+        // 6. Sync UI (Throttled)
+        frameCount.current += 1;
+        if (frameCount.current % 3 === 0) {
+            setPlayerStats({ ...p });
+        }
+    });
 
-    // Start Audio on first user interaction if menu handled it
-    const startAudio = () => audioRef.current?.start();
-    window.addEventListener('click', startAudio);
+    return (
+        <>
+            {/* Player */}
+            <group position={[playerRef.current.x, 0, playerRef.current.z]}>
+                <BikeModel color="red" isPolice={false} lean={playerRef.current.lean} />
+                <pointLight position={[0, 2, -5]} intensity={5} color="white" distance={50} />
+            </group>
 
-    const handleResize = () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener('resize', handleResize);
+            {/* Rivals */}
+            {rivalsRef.current.map(r => (
+                <group key={r.id} position={[r.x, 0, r.z]}>
+                    <BikeModel color={new THREE.Color(r.color)} isPolice={r.name === 'Police'} lean={r.lean} />
+                </group>
+            ))}
 
-    return () => {
-        isMounted.current = false;
-        window.removeEventListener('resize', handleResize);
-        window.removeEventListener('click', startAudio);
-        cancelAnimationFrame(animId);
-        if (mountRef.current && renderer.domElement) mountRef.current.removeChild(renderer.domElement);
-        try {
-            renderer.dispose();
-            scene.clear();
-        } catch(e) { console.warn("Cleanup warning", e); }
-        audioRef.current?.stop();
-    };
-  }, [gameState]);
+            <SceneryManager playerZ={playerRef.current.z} />
 
-  return <div ref={mountRef} className="absolute inset-0 w-full h-full bg-black" />;
+            {/* Road */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, playerRef.current.z]} receiveShadow>
+                <planeGeometry args={[ROAD_WIDTH, 800]} />
+                <RoadMaterial weather={Weather.SUNNY} playerZ={playerRef.current.z} speed={playerRef.current.speed} />
+            </mesh>
+            
+            {/* Floor */}
+            <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, -0.1, playerRef.current.z]}>
+                <planeGeometry args={[1000, 1000]} />
+                <meshBasicMaterial color="#050505" />
+            </mesh>
+        </>
+    );
+};
+
+// --- MAIN COMPONENT ---
+
+const GameScene: React.FC<GameSceneProps> = (props) => {
+  return (
+    <>
+      <div className="absolute inset-0 bg-black">
+          <Canvas 
+              shadows 
+              dpr={[1, 1.5]}
+              gl={{ 
+                  antialias: true,
+                  toneMapping: THREE.ACESFilmicToneMapping,
+              }}
+          >
+              <PerspectiveCamera makeDefault position={[0, CAMERA_HEIGHT, CAMERA_DEPTH]} near={0.1} far={1000} />
+              <Suspense fallback={null}>
+                  <GameController {...props} />
+                  <EffectComposer enableNormalPass={false}>
+                      <Bloom luminanceThreshold={0.5} intensity={1.5} radius={0.5} mipmapBlur />
+                      <Vignette eskil={false} offset={0.1} darkness={0.6} />
+                      <ToneMapping />
+                      <ChromaticAberration offset={[0.002, 0.002]} />
+                      <Noise opacity={0.05} />
+                  </EffectComposer>
+                  
+                  <Environment preset="city" background={false} />
+                  <ambientLight intensity={0.5} />
+                  <Stars />
+                  <fog attach="fog" args={['#050505', 20, 600]} />
+              </Suspense>
+          </Canvas>
+      </div>
+      <Loader />
+    </>
+  );
 };
 
 export default GameScene;

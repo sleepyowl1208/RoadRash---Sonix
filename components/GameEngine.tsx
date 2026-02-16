@@ -253,6 +253,7 @@ const GameEngine: React.FC<GameEngineProps> = ({
   const rpmRef = useRef(0);
   const healthRef = useRef(100);
   const scoreRef = useRef(0);
+  const fuelRef = useRef(100);
 
   // Combat State
   const combatStateRef = useRef({
@@ -281,6 +282,7 @@ const GameEngine: React.FC<GameEngineProps> = ({
     playerXRef.current = 0;
     healthRef.current = 100;
     scoreRef.current = 0;
+    fuelRef.current = 100;
 
     // --- SCENE & RENDERING ---
     const width = window.innerWidth;
@@ -645,10 +647,12 @@ const GameEngine: React.FC<GameEngineProps> = ({
                     maxSpeed: 180,
                     health: healthRef.current,
                     score: scoreRef.current,
+                    fuel: fuelRef.current,
                     gear: Math.floor(speedRef.current),
                     rpm: rpmRef.current,
                     isAttacking: combat.isAttacking,
-                    attackType: combat.type
+                    attackType: combat.type,
+                    lean: playerLeanRef.current
                 });
             }
 

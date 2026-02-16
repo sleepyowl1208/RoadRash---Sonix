@@ -19,7 +19,7 @@ logger = logging.getLogger("roadrash_backend")
 # --- App Initialization ---
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Backend API for Road Rash: Neon Vengeance",
+    description="Backend API for Road Rash - Sonix",
     version="0.1.0"
 )
 

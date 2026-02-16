@@ -1,6 +1,4 @@
 
-
-
 export enum GameState {
   MENU,
   RACING,
@@ -11,7 +9,13 @@ export enum GameState {
 export enum Weather {
   SUNNY = 'SUNNY',
   RAIN = 'RAIN',
-  DUST = 'DUST'
+  SNOW = 'SNOW'
+}
+
+export enum EnvironmentType {
+  OCEAN = 'OCEAN',
+  MOUNTAIN = 'MOUNTAIN',
+  CITY = 'CITY'
 }
 
 export interface Player {
@@ -20,11 +24,13 @@ export interface Player {
   speed: number;
   maxSpeed: number;
   health: number;
+  fuel: number; // 0 to 100
   score: number;
   gear: number;
   rpm: number; // 0 to 1
   isAttacking: boolean;
   attackType: 'KICK' | 'PUNCH' | 'NONE';
+  lean: number;
 }
 
 export interface Rival {
@@ -40,6 +46,7 @@ export interface Rival {
   health: number;
   personality: string;
   color: number;
+  lean: number;
 }
 
 export interface Commentary {
@@ -60,5 +67,6 @@ export interface RaceState {
   rivals: Rival[];
   gameState: GameState;
   weather: Weather;
+  environment: EnvironmentType;
   timestamp: number;
 }

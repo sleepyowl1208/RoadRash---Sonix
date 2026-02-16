@@ -1,11 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import * as firebaseAuth from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
+// Workaround for TypeScript error: "Module 'firebase/auth' has no exported member..."
+const { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } = firebaseAuth as any;
+
 interface AuthContextType {
-  user: User | null;
+  user: any | null; // Relaxed type from User to any
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -14,11 +17,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!auth) {
+      // If auth is not initialized (missing keys), stop loading and remain in guest mode
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (user: any) => {
       setUser(user);
       setLoading(false);
     });
@@ -26,6 +35,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signInWithGoogle = async () => {
+    if (!auth) {
+      alert("Login unavailable: Firebase configuration is missing.");
+      return;
+    }
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
@@ -34,7 +47,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const logout = () => signOut(auth);
+  const logout = async () => {
+    if (auth) {
+      await signOut(auth);
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ user, loading, signInWithGoogle, logout }}>

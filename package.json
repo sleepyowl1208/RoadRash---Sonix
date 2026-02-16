@@ -1,6 +1,6 @@
 {
-  "name": "road-rash-neon-vengeance",
-  "version": "0.1.0",
+  "name": "road-rash-sonix",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,15 +9,20 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@react-three/drei": "^9.99.0",
+    "@react-three/fiber": "^8.15.16",
+    "@react-three/postprocessing": "^2.16.0",
     "firebase": "^10.8.0",
     "howler": "^2.2.4",
     "lucide-react": "^0.330.0",
     "next": "14.1.0",
     "react": "^18",
     "react-dom": "^18",
+    "three": "0.161.0",
+    "three-stdlib": "^2.29.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.1",
-    "three": "0.161.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",
@@ -25,6 +30,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/three": "^0.161.2",
+    "@types/uuid": "^9.0.8",
     "autoprefixer": "^10.0.1",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",

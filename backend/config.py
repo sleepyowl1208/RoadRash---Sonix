@@ -2,7 +2,7 @@ import os
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    APP_NAME: str = "RoadRash AI - SoniX"
+    APP_NAME: str = "Road Rash - Sonix"
     ENV: str = "development"
     
     # Security
