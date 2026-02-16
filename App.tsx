@@ -12,8 +12,8 @@ import { useAuth } from './context/AuthContext';
 const App: React.FC = () => {
   const { user } = useAuth();
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
+  const [playerImage, setPlayerImage] = useState<string | undefined>(undefined);
   
-  // HUD State (React State - updates slower)
   const [playerStats, setPlayerStats] = useState<Player>({ 
     x: 0, z: 0, speed: 0, maxSpeed: 240, 
     health: 100, fuel: 100, score: 0, gear: 0, rpm: 0, 
@@ -33,7 +33,7 @@ const App: React.FC = () => {
 
   // Save Score Logic
   useEffect(() => {
-      if ((gameState === GameState.GAME_OVER || gameState === GameState.VICTORY) && user && db) {
+      if (gameState === GameState.VICTORY && user && db) {
           const saveScore = async () => {
               try {
                   const scoreRef = doc(db, "scores", user.uid);
@@ -52,6 +52,10 @@ const App: React.FC = () => {
   }, [gameState, user]);
 
   const startGame = () => {
+    if (gameState === GameState.PAUSED) {
+        setGameState(GameState.RACING);
+        return;
+    }
     setEndGameSummary('');
     AudioManager.getInstance().start();
 
@@ -60,9 +64,23 @@ const App: React.FC = () => {
         {
             id: 'police_1',
             name: 'Police',
-            x: -5,
-            z: 80, // Starts behind
+            x: -4,
+            z: 50, 
             speed: 80, 
+            dx: 0,
+            type: 'POLICE',
+            state: 'CHASING',
+            health: 200,
+            personality: 'Relentless',
+            color: 0xffffff,
+            lean: 0
+        },
+        {
+            id: 'police_2',
+            name: 'Police',
+            x: 4,
+            z: 80, 
+            speed: 82, 
             dx: 0,
             type: 'POLICE',
             state: 'CHASING',
@@ -74,9 +92,9 @@ const App: React.FC = () => {
         {
             id: 'rival_1',
             name: 'Viper',
-            x: 3,
-            z: -40, // Starts ahead
-            speed: 60,
+            x: 0,
+            z: -40, 
+            speed: 70,
             dx: 0,
             type: 'RIVAL',
             state: 'CHASING',
@@ -93,7 +111,6 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#050505]">
-      {/* 3D Scene handles Physics & Rendering */}
       <GameScene 
         gameState={gameState} 
         setGameState={setGameState} 
@@ -102,20 +119,22 @@ const App: React.FC = () => {
         rivals={rivals}
         setRivals={setRivals}
         setEndGameSummary={setEndGameSummary}
+        playerImage={playerImage}
       />
       
-      {/* 2D HUD Layer */}
       <HUD 
         player={playerStats} 
         commentary={commentary} 
         gameState={gameState}
       />
       
-      {/* Menus */}
       <MainMenu 
         gameState={gameState} 
         startGame={startGame}
         summary={endGameSummary}
+        setGameState={setGameState}
+        setPlayerImage={setPlayerImage}
+        playerImage={playerImage}
       />
     </div>
   );

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
@@ -9,7 +10,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType>({} as ThemeContextType);
 
-export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [highContrast, setHighContrast] = useState(false);
 
   useEffect(() => {

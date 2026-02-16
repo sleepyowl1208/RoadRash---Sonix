@@ -2,72 +2,60 @@
 export const ROAD_WIDTH = 24;
 export const SEGMENT_LENGTH = 200;
 export const DRAW_DISTANCE = 800; 
-export const CAMERA_HEIGHT = 1.6;
-export const CAMERA_DEPTH = 4.0;
+export const CAMERA_HEIGHT = 1.8; 
+export const CAMERA_DEPTH = 4.5;
 export const INITIAL_RIVALS_COUNT = 5;
 
-// REALISTIC MOTORCYCLE SPECS (approx 1000cc Sportbike)
+// REALISTIC MOTORCYCLE SPECS (1000cc Cyber-Sportbike)
 export const PHYSICS = {
   // Engine
-  MAX_RPM: 14000,
-  IDLE_RPM: 1200,
-  GEAR_RATIOS: [3.2, 2.4, 1.9, 1.6, 1.4, 1.2], // 1st to 6th
-  FINAL_DRIVE: 3.5,
-  TORQUE_CURVE: [20, 50, 85, 110, 105, 90, 70], // Torque at [1k, 3k, 5k, 8k, 10k, 12k, 13k] RPM
+  MAX_RPM: 13000,
+  IDLE_RPM: 1000,
+  GEAR_RATIOS: [3.2, 2.2, 1.7, 1.4, 1.2, 1.0], 
+  FINAL_DRIVE: 3.4,
+  TORQUE_CURVE: [30, 70, 95, 110, 115, 110, 90], 
   
   // Forces
-  MASS: 220, // kg (Bike + Rider)
-  ENGINE_BRAKING: 15.0, // N
-  BRAKING_POWER: 12000, // N (Dual disc)
-  DRAG_COEFF: 0.35, // Aerodynamic drag
-  FRONTAL_AREA: 0.5, // m^2
-  ROLLING_RESISTANCE: 0.02,
+  MASS: 240, 
+  ENGINE_BRAKING: 20.0, 
+  BRAKING_POWER: 14000, 
+  DRAG_COEFF: 0.32, 
+  FRONTAL_AREA: 0.55, 
+  ROLLING_RESISTANCE: 0.015,
+
+  // Simplified Physics for GameEngine compatibility
+  ACCELERATION: 20.0,
+  BRAKING: 40.0,
+  DRAG: 0.2,
+  OFF_ROAD_DRAG: 30.0,
 
   // Limits
-  MAX_SPEED: 95.0,        // m/s (~210 mph)
-  LATERAL_SPEED: 18.0,    // m/s
-  MAX_LEAN: 0.95,          // Radians (~55 degrees)
+  MAX_SPEED: 90.0,        
+  LATERAL_SPEED: 16.0,    
+  MAX_LEAN: 0.85,          
   
-  // Gameplay & Weather Modifiers
-  GRIP_SUNNY: 1.0,
-  GRIP_RAIN: 0.65,
-  GRIP_SNOW: 0.45,
-  DRAG_RAIN_MOD: 1.05,
+  // Gameplay
+  FUEL_BURN_RATE: 2.5, // Reduced from 4.5 to make it fair
+  COMBAT_IMPULSE: 12.0, 
+  COMBAT_COOLDOWN: 400,
+  VICTORY_DISTANCE: 2000, // 2km Target
   
-  COMBAT_IMPULSE: 8.0,
-  COLLISION_BOUNCE: 0.6,
-  COMBAT_COOLDOWN: 500,
-  
-  // Legacy mappings for AI
-  ACCELERATION: 15.0,
-  BRAKING: 25.0,
-  DRAG: 2.0,
-  OFF_ROAD_DRAG: 60.0
+  // AI
+  POLICE_AGRESSION: 1.5
 };
 
 export const COLORS = {
-  SKY_TOP: '#0f172a',      
-  SKY_BOTTOM: '#334155',   
-  ASPHALT: '#1e1e1e',
-  ASPHALT_WET: '#0a0a0a',
-  ASPHALT_SNOW: '#e2e8f0',
-  GRASS: '#14532d',
-  DIRT: '#451a03',
-  LANE_MARKER: '#f8fafc',
-  FOG_SUNNY: '#e0f2fe',
-  FOG_RAIN: '#64748b'
+  SKY_TOP: '#050510',      
+  SKY_BOTTOM: '#1a1a2e',   
+  ASPHALT: '#111111',
+  ASPHALT_WET: '#000000',
+  LANE_MARKER: '#00ffff', 
+  FOG_SUNNY: '#050510',
+  FOG_RAIN: '#0a0a10',
+  GRASS: '#0f380f',
+  NEON_BUILDINGS: ['#00ffff', '#ff00ff', '#00ff00', '#ffff00']
 };
 
 export const ASSETS = {
-  // In a real app, these would be URLs to .glb files in public/
   BIKE_MODEL: '/models/sportbike.glb',
-  RIDER_MODEL: '/models/rider.glb',
-  POLICE_MODEL: '/models/police_bike.glb',
-  ENV_TEXTURES: {
-    ASPHALT_NRM: '/textures/asphalt_normal.jpg',
-    ASPHALT_ROUGH: '/textures/asphalt_rough.jpg',
-  }
 };
-
-export const TRAFFIC_COUNT = 20;
-export const POLICE_COUNT = 3;

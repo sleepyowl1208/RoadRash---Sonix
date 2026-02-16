@@ -1,9 +1,13 @@
 
+
 export enum GameState {
   MENU,
+  GARAGE, // New GenAI feature
   RACING,
+  PAUSED,
   GAME_OVER,
-  VICTORY
+  VICTORY,
+  BUSTED
 }
 
 export enum Weather {
@@ -20,17 +24,19 @@ export enum EnvironmentType {
 
 export interface Player {
   x: number;
-  z: number; // World distance
+  z: number;
   speed: number;
   maxSpeed: number;
   health: number;
-  fuel: number; // 0 to 100
+  fuel: number;
   score: number;
   gear: number;
-  rpm: number; // 0 to 1
+  rpm: number;
   isAttacking: boolean;
   attackType: 'KICK' | 'PUNCH' | 'NONE';
   lean: number;
+  // Customization
+  customImage?: string; // Data URL from GenAI
 }
 
 export interface Rival {
@@ -39,7 +45,7 @@ export interface Rival {
   x: number;
   z: number;
   speed: number;
-  dx: number; // Lateral velocity
+  dx: number;
   type: 'RIVAL' | 'POLICE';
   state: 'CHASING' | 'ATTACKING' | 'CRASHED' | 'STUNNED';
   aiState?: string;
@@ -49,24 +55,33 @@ export interface Rival {
   lean: number;
 }
 
+export interface FuelPickup {
+  id: string;
+  x: number;
+  z: number;
+  active: boolean;
+}
+
 export interface Commentary {
   text: string;
-  speaker: 'System' | 'Rival' | 'Announcer';
+  speaker: 'System' | 'Rival' | 'Announcer' | 'Police';
   timestamp: number;
 }
 
-export interface AIEnvironmentResponse {
-  commentary?: string;
-  rival_actions?: any[];
-  environment_effect?: string;
-  dynamic_difficulty_adjustment?: number;
+export interface GenAIRequest {
+  prompt: string;
+  style: 'REALISTIC' | 'CYBERPUNK' | 'ANIME';
 }
 
 export interface RaceState {
   player: Player;
   rivals: Rival[];
   gameState: GameState;
-  weather: Weather;
-  environment: EnvironmentType;
   timestamp: number;
+}
+
+export interface AIEnvironmentResponse {
+  commentary?: Commentary;
+  weather?: Weather;
+  rivalUpdates?: Partial<Rival>[];
 }
