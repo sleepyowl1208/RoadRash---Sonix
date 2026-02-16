@@ -24,9 +24,17 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
   return (
     <div className="absolute inset-0 z-10 pointer-events-none font-sans text-white select-none">
       
+      {/* Accessibility Alerts (Hidden visually, read by screen reader) */}
+      <div className="sr-only" role="status" aria-live="polite">
+          {isOffRoad && "Warning: You are off road."}
+          {fuelPercent < 15 && "Warning: Fuel critical."}
+          {healthPercent < 20 && "Warning: Bike damage critical."}
+          {commentary && `Commentary: ${commentary.text}`}
+      </div>
+
       {/* Off Road Alert */}
       {isOffRoad && (
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 flex flex-col items-center animate-pulse-fast">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 flex flex-col items-center animate-pulse-fast" role="alert">
               <h2 className="text-4xl font-black text-red-500 neon-text italic uppercase tracking-widest border-4 border-red-500 px-6 py-2">
                   OFF TRACK
               </h2>
@@ -35,7 +43,7 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
       )}
 
       {/* Top Left: Distance */}
-      <div className="absolute top-8 left-8">
+      <div className="absolute top-8 left-8" aria-label="Race Progress">
           <div className="flex flex-col">
               <span className="text-xs text-neutral-400 uppercase tracking-widest mb-1">Target Distance</span>
               <div className="flex items-baseline gap-2">
@@ -44,7 +52,7 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
                   </span>
                   <span className="text-sm font-bold text-cyan-400">KM</span>
               </div>
-              <div className="w-32 h-1 bg-gray-800 mt-1">
+              <div className="w-32 h-1 bg-gray-800 mt-1" role="progressbar" aria-valuenow={Math.min(100, (player.score / 10000) * 100)} aria-valuemax={100}>
                   <div 
                     className="h-full bg-cyan-500" 
                     style={{ width: `${Math.min(100, (player.score / 10000) * 100)}%` }} 
@@ -64,11 +72,11 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
       )}
 
       {/* Bottom Right: Realistic Cluster */}
-      <div className="absolute bottom-8 right-8 scale-90 origin-bottom-right">
+      <div className="absolute bottom-8 right-8 scale-90 origin-bottom-right" aria-label="Dashboard">
          <div className="relative w-64 h-64 bg-black/40 rounded-full border-4 border-gray-800 backdrop-blur-md shadow-2xl">
             
             {/* Tick Marks */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" aria-hidden="true">
                 {/* Major Ticks */}
                 {[...Array(11)].map((_, i) => {
                     const deg = -135 + (i * 27);
@@ -91,6 +99,7 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
             <div 
                 className="absolute top-0 left-0 w-full h-full transition-transform duration-100 ease-out"
                 style={{ transform: `rotate(${speedAngle}deg)` }}
+                aria-hidden="true"
             >
                 <div className="absolute top-[15%] left-1/2 w-1 h-[35%] bg-red-500 -translate-x-1/2 origin-bottom shadow-[0_0_10px_red]" />
             </div>
@@ -102,12 +111,12 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
 
             {/* Digital Speed Readout */}
             <div className="absolute top-[65%] left-1/2 -translate-x-1/2 text-center">
-               <div className="text-4xl font-black font-mono tracking-tighter leading-none text-white">{speed}</div>
+               <div className="text-4xl font-black font-mono tracking-tighter leading-none text-white" aria-label={`Speed ${speed} MPH`}>{speed}</div>
                <div className="text-[10px] text-gray-400 font-bold mt-1">MPH</div>
             </div>
 
             {/* Gear Indicator */}
-            <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-8 h-8 border border-white/20 bg-black/50 flex items-center justify-center rounded">
+            <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-8 h-8 border border-white/20 bg-black/50 flex items-center justify-center rounded" aria-label={`Gear ${player.gear}`}>
                 <span className="text-xl font-bold text-yellow-500">{player.gear === 0 ? 'N' : player.gear}</span>
             </div>
          </div>
@@ -115,7 +124,7 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
          {/* Fuel & Health Bars (Satellite) */}
          <div className="absolute -left-20 bottom-0 w-16 h-48 flex flex-col justify-end gap-4">
             {/* Fuel */}
-            <div className="relative h-24 bg-gray-900/80 rounded-full overflow-hidden border border-gray-700">
+            <div className="relative h-24 bg-gray-900/80 rounded-full overflow-hidden border border-gray-700" role="progressbar" aria-label="Fuel Level" aria-valuenow={fuelPercent} aria-valuemin={0} aria-valuemax={100}>
                 <div 
                     className={`absolute bottom-0 w-full transition-all duration-500 ${fuelPercent < 20 ? 'bg-red-500 animate-pulse' : 'bg-orange-500'}`}
                     style={{ height: `${fuelPercent}%` }}
@@ -130,7 +139,7 @@ const HUD: React.FC<HUDProps> = ({ player, commentary, gameState }) => {
             </div>
 
             {/* Health */}
-            <div className="relative h-24 bg-gray-900/80 rounded-full overflow-hidden border border-gray-700">
+            <div className="relative h-24 bg-gray-900/80 rounded-full overflow-hidden border border-gray-700" role="progressbar" aria-label="Health Level" aria-valuenow={healthPercent} aria-valuemin={0} aria-valuemax={100}>
                 <div 
                     className={`absolute bottom-0 w-full transition-all duration-300 ${healthPercent < 30 ? 'bg-red-600' : 'bg-green-500'}`}
                     style={{ height: `${healthPercent}%` }}

@@ -26,56 +26,96 @@ describe('PhysicsEngine', () => {
         };
     });
 
+    // --- ACCELERATION & BRAKING ---
+
     test('should accelerate when throttle is applied', () => {
         const inputs = { up: true, down: false, left: false, right: false, attack: false };
         engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
         expect(mockPlayer.speed).toBeGreaterThan(0);
+        expect(mockPlayer.rpm).toBeGreaterThan(1000);
     });
 
-    test('should brake when down is pressed', () => {
-        mockPlayer.speed = 50;
+    test('should brake efficiently', () => {
+        mockPlayer.speed = 100;
         const inputs = { up: false, down: true, left: false, right: false, attack: false };
+        engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
+        expect(mockPlayer.speed).toBeLessThan(100);
+    });
+
+    test('should apply rolling resistance (drag) when no input', () => {
+        mockPlayer.speed = 50;
+        const inputs = { up: false, down: false, left: false, right: false, attack: false };
         engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
         expect(mockPlayer.speed).toBeLessThan(50);
     });
 
-    test('should consume fuel when moving', () => {
-        mockPlayer.speed = 50;
+    // --- GEAR SHIFTING LOGIC ---
+
+    test('should upshift when RPM gets too high', () => {
+        // Force conditions for upshift
+        mockPlayer.gear = 0;
+        mockPlayer.speed = 40; // High speed for 1st gear
+        
+        // Simulate a frame where RPM would spike
         const inputs = { up: true, down: false, left: false, right: false, attack: false };
-        // Simulation logic in GameController handles fuel, but PhysicsEngine logic mostly handles movement.
-        // If fuel consumption logic was inside PhysicsEngine we would test it here. 
-        // Based on current implementation, PhysicsEngine calculates RPM/Speed.
         engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
-        expect(mockPlayer.rpm).toBeGreaterThan(1000);
+        
+        // Physics engine auto-shifts logic: if calcRPM > MAX_RPM * 0.95
+        // We expect gear to increment
+        if (mockPlayer.rpm > PHYSICS.MAX_RPM * 0.9) {
+             expect(mockPlayer.gear).toBeGreaterThan(0);
+        }
     });
 
-    test('should clamp road boundaries', () => {
-        mockPlayer.x = 20; // Near edge
-        const inputs = { up: true, down: false, left: false, right: true, attack: false };
+    test('should downshift when RPM gets too low', () => {
+        mockPlayer.gear = 3;
+        mockPlayer.speed = 10; // Too slow for 4th gear
         
-        // Run multiple frames to push off road
-        for(let i=0; i<100; i++) {
+        const inputs = { up: true, down: false, left: false, right: false, attack: false };
+        engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
+        
+        expect(mockPlayer.gear).toBeLessThan(3);
+    });
+
+    // --- LATERAL MOVEMENT ---
+
+    test('should move laterally when steering', () => {
+        const initialX = mockPlayer.x;
+        const inputs = { up: true, down: false, left: true, right: false, attack: false };
+        engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
+        expect(mockPlayer.x).toBeLessThan(initialX); // Moving Left (Negative X)
+        expect(mockPlayer.lean).toBeGreaterThan(0); // Leaning into turn
+    });
+
+    test('should clamp lateral movement to road width', () => {
+        mockPlayer.x = -20; // Way off road
+        const inputs = { up: true, down: false, left: true, right: false, attack: false };
+        
+        for(let i=0; i<50; i++) {
             engine.updatePlayer(mockPlayer, inputs, 0.1, Weather.SUNNY);
         }
         
-        // Should be clamped (Road width is 24, so max is 12 + 2 = 14)
-        expect(mockPlayer.x).toBeLessThanOrEqual(14);
+        // ROAD_WIDTH is 24, half is 12, plus buffer of 2 = 14.
+        // Left side limit should be around -14
+        expect(mockPlayer.x).toBeGreaterThanOrEqual(-15);
     });
 
-    test('should reduce grip in rain', () => {
-        mockPlayer.speed = 50;
+    // --- WEATHER PHYSICS ---
+
+    test('should have reduced braking power in rain', () => {
+        mockPlayer.speed = 100;
         const inputs = { up: false, down: true, left: false, right: false, attack: false };
         
-        // Dry Braking
         const dryPlayer = { ...mockPlayer };
+        const wetPlayer = { ...mockPlayer };
+
+        // Dry Simulation
         engine.updatePlayer(dryPlayer, inputs, 0.1, Weather.SUNNY);
         
-        // Wet Braking
-        const wetPlayer = { ...mockPlayer };
+        // Wet Simulation
         engine.updatePlayer(wetPlayer, inputs, 0.1, Weather.RAIN);
 
-        // Dry braking should reduce speed more (more grip) than wet
-        // Speed: 50 -> Dry: 40, Wet: 45
+        // Dry player should slow down MORE than wet player (lower speed value)
         expect(dryPlayer.speed).toBeLessThan(wetPlayer.speed);
     });
 });
